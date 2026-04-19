@@ -12,5 +12,6 @@ app.get('/api/test', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor ARIA corriendo en el puerto ${PORT}`);
+  console.log(`Servidor ARIA corriendo en el puerto ${PORT}`);
 });
+// ...
