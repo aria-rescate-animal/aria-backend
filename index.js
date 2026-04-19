@@ -1,17 +1,15 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
+// Importamos el módulo de DB para que intente la conexión al iniciar
+require('./src/db');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
-app.get('/api/test', (req, res) => {
-  res.json({ mensaje: '¡Migración a Express exitosa! El servidor está vivo.' });
-});
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Servidor ARIA corriendo en el puerto ${PORT}`);
+  console.log(`Servidor Express corriendo en el puerto ${PORT}`);
 });
-// ...
