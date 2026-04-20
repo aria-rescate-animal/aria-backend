@@ -54,7 +54,39 @@ app.post('/api/login', async (req, res) => {
 });
 
 
+// TEndpoint para GUARDAR un nuevo reporte (POST)
+app.post('/api/reportes', async (req, res) => {
+  try {
+    const { especie, descripcion, ubicacion, foto } = req.body;
+    
+    const [result] = await pool.query(
+      "INSERT INTO reportes (especie, descripcion, ubicacion, foto) VALUES (?, ?, ?, ?)",
+      [especie, descripcion, ubicacion, foto]
+    );
+
+    res.status(201).json({ 
+      mensaje: "Reporte creado exitosamente",
+      id_reporte: result.insertId
+    });
+  } catch (error) {
+    console.error("Error al guardar reporte:", error);
+    res.status(500).json({ error: "Error al guardar el reporte" });
+  }
+});
+
+// Endpoint para OBTENER todos los reportes (GET)
+app.get('/api/reportes', async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM reportes ORDER BY fecha DESC");
+    res.json(rows);
+  } catch (error) {
+    console.error("Error al obtener reportes:", error);
+    res.status(500).json({ error: "Error al cargar el feed de reportes" });
+  }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor  corriendo en el puerto ${PORT}`);
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
