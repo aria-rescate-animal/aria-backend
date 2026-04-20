@@ -15,11 +15,11 @@ const pool = mysql.createPool({
 // Implementar validación de conexión con console.log
 pool.getConnection()
   .then(conn => {
-    console.log("✅ Conexión a MySQL exitosa - Infraestructura de persistencia lista");
+    console.log("Conexión a MySQL exitosa ");
     conn.release();
   })
   .catch(err => {
-    console.error("❌ Error al conectar con la base de datos:", err.message);
+    console.error("Error al conectar con la base de datos:", err.message);
   });
 
 module.exports = pool;
