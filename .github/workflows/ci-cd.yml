@@ -1,0 +1,132 @@
+name: ARIA Backend CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ''
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: aria_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Crear tablas en MySQL
+        run: |
+          mysql -h 127.0.0.1 -u root aria_db << 'EOF'
+          CREATE TABLE IF NOT EXISTS usuarios (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            password VARCHAR(255) DEFAULT NULL,
+            rol ENUM('ciudadano','entidad','administrador') DEFAULT 'ciudadano',
+            aprobacion_pendiente TINYINT(1) DEFAULT 0,
+            email_verificado TINYINT(1) DEFAULT 1,
+            google_id VARCHAR(100) DEFAULT NULL,
+            nit VARCHAR(20) DEFAULT NULL,
+            nombre_organizacion VARCHAR(150) DEFAULT NULL,
+            tipo_entidad ENUM('Fundación','Clínica Privada','Entidad Gubernamental') DEFAULT NULL,
+            telefono_oficial VARCHAR(20) DEFAULT NULL,
+            direccion_sede VARCHAR(255) DEFAULT NULL,
+            enlace_verificacion VARCHAR(500) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS reportes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            especie ENUM('Perro','Gato','Ave','Reptil','Otro') NOT NULL,
+            descripcion TEXT NOT NULL,
+            ubicacion VARCHAR(255) NOT NULL,
+            foto VARCHAR(500) DEFAULT NULL,
+            estado ENUM('urgente','en proceso','rescatado') DEFAULT 'urgente',
+            reportadoPor VARCHAR(100) NOT NULL,
+            usuario_id INT DEFAULT NULL,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+          );
+          CREATE TABLE IF NOT EXISTS notificaciones (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT NOT NULL,
+            titulo VARCHAR(150) NOT NULL,
+            mensaje TEXT NOT NULL,
+            leida TINYINT(1) DEFAULT 0,
+            reporte_id INT DEFAULT NULL,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+            FOREIGN KEY (reporte_id) REFERENCES reportes(id) ON DELETE SET NULL
+          );
+          CREATE TABLE IF NOT EXISTS verificaciones_otp (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(100) NOT NULL,
+            codigo VARCHAR(100) NOT NULL,
+            expira_en DATETIME NOT NULL,
+            usado TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS tokens_recuperacion (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT NOT NULL,
+            token VARCHAR(100) NOT NULL,
+            expira_en DATETIME NOT NULL,
+            usado TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+          );
+          EOF
+
+      - name: Iniciar servidor en background
+        run: node index.js &
+        env:
+          PORT: 3000
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: ''
+          DB_NAME: aria_db
+          JWT_SECRET: aria_jwt_secret_ci
+          FRONTEND_URL: http://localhost:5173
+          EMAIL_USER: test@test.com
+          EMAIL_PASS: testpass
+          CLOUDINARY_CLOUD_NAME: test
+          CLOUDINARY_API_KEY: '000000000000000'
+          CLOUDINARY_API_SECRET: testSecret
+          SESSION_SECRET: aria_session_ci
+          GOOGLE_CLIENT_ID: test
+          GOOGLE_CLIENT_SECRET: test
+
+      - name: Esperar que el servidor este listo
+        run: npx wait-on http://localhost:3000 --timeout 30000
+
+      - name: Ejecutar pruebas Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          browser: chrome
+          headed: false
+          config: baseUrl=http://localhost:3000
+          wait-on: 'http://localhost:3000'
+          wait-on-timeout: 30
