@@ -1,11 +1,12 @@
 {
   "name": "aria-backend",
   "version": "1.0.0",
-  "description": "<p align=\"center\">\r   <a href=\"http://nestjs.com/\" target=\"blank\"><img src=\"https://nestjs.com/img/logo-small.svg\" width=\"120\" alt=\"Nest Logo\" /></a>\r </p>",
+  "description": "Backend ARIA - Plataforma de Rescate Animal",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "jest --testPathPattern=src/test"
   },
   "repository": {
     "type": "git",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "cypress": "^15.14.2",
+    "jest": "^29.7.0",
     "nodemon": "^3.1.14"
   }
 }

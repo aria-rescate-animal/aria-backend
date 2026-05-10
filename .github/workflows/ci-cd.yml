@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  validar-codigo:
+  validar-y-testear:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,16 +23,8 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
+      - name: Ejecutar pruebas unitarias
+        run: npm test
+
       - name: Validar sintaxis del codigo
         run: node --check index.js
-
-      - name: Validar archivos del proyecto
-        run: |
-          node --check src/routes/auth.routes.js
-          node --check src/routes/reportes.routes.js
-          node --check src/routes/notificaciones.routes.js
-          node --check src/routes/admin.routes.js
-          node --check src/controllers/reportes.controller.js
-          node --check src/middlewares/auth.middleware.js
-          node --check src/config/email.js
-          echo "Todos los archivos son validos"
