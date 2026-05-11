@@ -10,6 +10,38 @@ const getReportes = async (req, res) => {
   }
 };
 
+// GET /api/reportes/mis-reportes — Solo los reportes del usuario autenticado
+const getMisReportes = async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(20, parseInt(req.query.limit) || 20);
+    const offset = (page - 1) * limit;
+
+    const [[{ total }]] = await pool.query(
+      'SELECT COUNT(*) as total FROM reportes WHERE usuario_id = ?',
+      [req.user.id]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT id, especie, descripcion, ubicacion, foto, estado, reportadoPor, fecha
+       FROM reportes
+       WHERE usuario_id = ?
+       ORDER BY fecha DESC
+       LIMIT ? OFFSET ?`,
+      [req.user.id, limit, offset]
+    );
+
+    res.status(200).json({
+      reportes: rows,
+      total,
+      pagina: page,
+      totalPaginas: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Error al cargar tus reportes" });
+  }
+};
+
 // GET /api/reportes/:id
 const getReporte = async (req, res) => {
   try {
@@ -62,7 +94,6 @@ const crearReporte = async (req, res) => {
       [especie, descripcion, ubicacion, fotoUrl, 'urgente', reportadoPor, req.user.id]
     );
 
-    // Notificar SOLO a entidades aprobadas
     await notificarAEntidades(result.insertId, especie, ubicacion);
 
     res.status(201).json({
@@ -82,7 +113,6 @@ const actualizarEstado = async (req, res) => {
       return res.status(403).json({ message: 'Sin permisos para cambiar estado' });
     }
 
-    // Verificar que la entidad esté aprobada
     if (req.user.rol === 'entidad') {
       const [ent] = await pool.query(
         'SELECT aprobacion_pendiente FROM usuarios WHERE id = ?', [req.user.id]
@@ -98,35 +128,27 @@ const actualizarEstado = async (req, res) => {
       return res.status(400).json({ message: 'Estado invalido' });
     }
 
-    // Buscar el reporte ANTES del UPDATE para obtener el ciudadano autor
     const [reportes] = await pool.query("SELECT * FROM reportes WHERE id = ?", [req.params.id]);
     if (reportes.length === 0) return res.status(404).json({ message: 'Reporte no encontrado' });
     const reporte = reportes[0];
 
     await pool.query("UPDATE reportes SET estado = ? WHERE id = ?", [estado, req.params.id]);
 
-    // Notificar EXCLUSIVAMENTE al ciudadano que creó el reporte
     if (estado === 'rescatado') {
       await pool.query(
         "INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)",
-        [
-          reporte.usuario_id,
-          'Tu reporte fue rescatado',
-          `El ${reporte.especie} que reportaste en "${reporte.ubicacion}" fue rescatado. Gracias por tu ayuda.`,
-          reporte.id
-        ]
+        [reporte.usuario_id, 'Tu reporte fue rescatado',
+         `El ${reporte.especie} que reportaste en "${reporte.ubicacion}" fue rescatado. Gracias por tu ayuda.`,
+         reporte.id]
       );
     }
 
     if (estado === 'en proceso') {
       await pool.query(
         "INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)",
-        [
-          reporte.usuario_id,
-          'Tu reporte esta siendo atendido',
-          `Una entidad esta atendiendo el caso del ${reporte.especie} que reportaste en "${reporte.ubicacion}".`,
-          reporte.id
-        ]
+        [reporte.usuario_id, 'Tu reporte esta siendo atendido',
+         `Una entidad esta atendiendo el caso del ${reporte.especie} que reportaste en "${reporte.ubicacion}".`,
+         reporte.id]
       );
     }
 
@@ -147,4 +169,4 @@ const eliminarReporte = async (req, res) => {
   }
 };
 
-module.exports = { getReportes, getReporte, crearReporte, actualizarEstado, eliminarReporte };
+module.exports = { getReportes, getMisReportes, getReporte, crearReporte, actualizarEstado, eliminarReporte };
