@@ -6,6 +6,7 @@ const crypto   = require('crypto');
 const pool     = require('../db');
 const { enviarOTP, enviarOTPRecuperacion } = require('../config/email');
 const passport = require('../config/passport');
+const verificarToken = require('../middlewares/auth.middleware');
 
 const JWT_SECRET   = process.env.JWT_SECRET   || 'ARIA_SECRET_KEY_2026';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -17,7 +18,7 @@ const generarToken = (user) => jwt.sign(
   { expiresIn: '24h' }
 );
 
-// ─── REGISTRO ─────────────────────────────────────────────────────────────────
+// REGISTRO
 router.post('/register', async (req, res) => {
   try {
     const {
@@ -50,25 +51,20 @@ router.post('/register', async (req, res) => {
     );
     const nuevoUsuarioId = result.insertId;
 
-    // Generar OTP de 6 dígitos y guardarlo
     const codigo = generarOTP();
-    const expira = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+    const expira = new Date(Date.now() + 15 * 60 * 1000);
 
     await pool.query(
       'INSERT INTO verificaciones_otp (email, codigo, expira_en) VALUES (?, ?, ?)',
       [email, codigo, expira]
     );
 
-    // Enviar OTP por correo
     try {
       await enviarOTP(email, codigo, nombre);
     } catch (emailErr) {
       console.error('Error al enviar OTP:', emailErr.message);
-      
-      // Revertir: Si falla el correo, eliminamos al usuario y su código para que pueda reintentar
       await pool.query('DELETE FROM verificaciones_otp WHERE email = ?', [email]);
       await pool.query('DELETE FROM usuarios WHERE id = ?', [nuevoUsuarioId]);
-      
       return res.status(500).json({ error: 'No se pudo enviar el codigo. Por favor, intenta registrarte de nuevo.' });
     }
 
@@ -84,8 +80,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ─── VERIFICAR CUENTA CON OTP (endpoint principal) ───────────────────────────
-// POST /api/auth/verificar-cuenta
+// VERIFICAR CUENTA CON OTP
 router.post('/verificar-cuenta', async (req, res) => {
   try {
     const { email, codigo } = req.body;
@@ -107,14 +102,12 @@ router.post('/verificar-cuenta', async (req, res) => {
       return res.status(400).json({ error: 'El codigo ha expirado. Solicita uno nuevo.' });
     }
 
-    // Marcar OTP como usado y activar la cuenta
     await pool.query('UPDATE verificaciones_otp SET usado = 1 WHERE id = ?', [otp.id]);
     await pool.query('UPDATE usuarios SET email_verificado = 1 WHERE email = ?', [email]);
 
     const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
     const user   = rows[0];
 
-    // Entidad pendiente de aprobacion admin
     if (user.rol === 'entidad' && user.aprobacion_pendiente === 1) {
       return res.json({
         verificado: true,
@@ -123,7 +116,6 @@ router.post('/verificar-cuenta', async (req, res) => {
       });
     }
 
-    // Auto-login: devolver JWT directamente
     const token = generarToken(user);
     res.json({
       verificado: true,
@@ -136,26 +128,24 @@ router.post('/verificar-cuenta', async (req, res) => {
   }
 });
 
-// Alias para compatibilidad con el frontend existente
+// Alias de compatibilidad
 router.post('/verificar-otp', async (req, res) => {
   req.url = '/verificar-cuenta';
   return router.handle(req, res, () => {});
 });
 
-// ─── REENVIAR OTP ─────────────────────────────────────────────────────────────
+// REENVIAR OTP
 router.post('/reenviar-otp', async (req, res) => {
   try {
     const { email } = req.body;
     const [users] = await pool.query('SELECT nombre FROM usuarios WHERE email = ?', [email]);
     if (users.length === 0) return res.status(404).json({ error: 'Email no encontrado' });
 
-    // Invalidar OTPs anteriores
     await pool.query(
       'UPDATE verificaciones_otp SET usado = 1 WHERE email = ? AND usado = 0',
       [email]
     );
 
-    // Generar nuevo OTP
     const codigo = generarOTP();
     const expira = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -172,7 +162,7 @@ router.post('/reenviar-otp', async (req, res) => {
   }
 });
 
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
+// LOGIN — incluye validacion de cuenta bloqueada
 router.post('/login', async (req, res) => {
   try {
     const { email, contrasena } = req.body;
@@ -186,6 +176,13 @@ router.post('/login', async (req, res) => {
         error: 'Debes verificar tu correo antes de iniciar sesion.',
         requiereVerificacion: true,
         email
+      });
+    }
+
+    // Cuenta bloqueada por administrador
+    if (user.bloqueado === 1) {
+      return res.status(403).json({
+        error: 'Tu cuenta ha sido suspendida. Contacta al administrador.'
       });
     }
 
@@ -210,7 +207,39 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ─── RECUPERAR CONTRASEÑA con OTP ────────────────────────────────────────────
+// PATCH /api/auth/perfil — Actualizar nombre del usuario autenticado
+router.patch('/perfil', verificarToken, async (req, res) => {
+  try {
+    const { nombre } = req.body;
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre no puede estar vacio' });
+    }
+    if (nombre.trim().length < 2) {
+      return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
+    }
+
+    await pool.query(
+      'UPDATE usuarios SET nombre = ? WHERE id = ?',
+      [nombre.trim(), req.user.id]
+    );
+
+    const [rows] = await pool.query(
+      'SELECT id, nombre, email, rol FROM usuarios WHERE id = ?',
+      [req.user.id]
+    );
+
+    res.json({
+      mensaje: 'Perfil actualizado correctamente',
+      user: rows[0]
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al actualizar perfil' });
+  }
+});
+
+// RECUPERAR PASSWORD
 router.post('/recuperar-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -224,7 +253,6 @@ router.post('/recuperar-password', async (req, res) => {
     const codigo = generarOTP();
     const expira = new Date(Date.now() + 15 * 60 * 1000);
 
-    // Invalidar tokens anteriores
     await pool.query(
       'UPDATE tokens_recuperacion SET usado = 1 WHERE usuario_id = ? AND usado = 0',
       [user.id]
@@ -248,7 +276,7 @@ router.post('/recuperar-password', async (req, res) => {
   }
 });
 
-// ─── VALIDAR OTP RECUPERACIÓN ─────────────────────────────────────────────────
+// VALIDAR OTP RECUPERACION
 router.post('/validar-otp-recuperacion', async (req, res) => {
   try {
     const { email, codigo } = req.body;
@@ -269,7 +297,6 @@ router.post('/validar-otp-recuperacion', async (req, res) => {
       return res.status(400).json({ error: 'El codigo ha expirado. Solicita uno nuevo.' });
     }
 
-    // Generar token temporal para el paso de nueva contraseña
     const tempToken = crypto.randomBytes(16).toString('hex');
     await pool.query(
       'UPDATE tokens_recuperacion SET token = ? WHERE id = ?',
@@ -282,7 +309,7 @@ router.post('/validar-otp-recuperacion', async (req, res) => {
   }
 });
 
-// ─── RESET CONTRASEÑA ─────────────────────────────────────────────────────────
+// RESET PASSWORD
 router.post('/reset-password', async (req, res) => {
   try {
     const { resetToken, contrasena } = req.body;
@@ -308,7 +335,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// ─── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
+// GOOGLE OAUTH
 router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
