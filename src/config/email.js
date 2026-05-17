@@ -1,17 +1,18 @@
-const nodemailer = require('nodemailer');
+// ============================================================
+// ARIA — Servicio de correo con Resend
+// Dominio: ariaproyecto.online
+// Funciona en cualquier red — reemplaza Nodemailer
+// ============================================================
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  }
-});
+const { Resend } = require('resend');
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM   = `ARIA Rescate Animal <aria@ariaproyecto.online>`;
 
 // Email con código OTP de 6 dígitos
 const enviarOTP = async (email, codigo, nombre) => {
-  await transporter.sendMail({
-    from: `"ARIA - Rescate Animal" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM,
     to: email,
     subject: 'Verifica tu cuenta ARIA',
     html: `
@@ -38,12 +39,19 @@ const enviarOTP = async (email, codigo, nombre) => {
       </div>
     `
   });
+
+  if (error) {
+    console.error('Error Resend OTP:', JSON.stringify(error));
+    throw new Error(error.message || 'Error al enviar correo OTP');
+  }
+
+  console.log('OTP enviado a:', email, '| ID:', data?.id);
 };
 
-// Email con Magic Link (auto-login)
+// Email con Magic Link
 const enviarMagicLink = async (email, nombre, enlaceVerificacion) => {
-  await transporter.sendMail({
-    from: `"ARIA - Rescate Animal" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM,
     to: email,
     subject: 'Activa tu cuenta ARIA',
     html: `
@@ -55,27 +63,34 @@ const enviarMagicLink = async (email, nombre, enlaceVerificacion) => {
         <div style="background:white;border-radius:12px;padding:1.5rem;border:1px solid #e2e8f0;">
           <h2 style="color:#0f172a;margin:0 0 0.75rem;font-size:1.1rem;">Bienvenido, ${nombre}</h2>
           <p style="color:#475569;margin:0 0 1.5rem;line-height:1.6;font-size:0.875rem;">
-            Tu cuenta ha sido creada exitosamente. Haz clic en el boton para verificar tu correo e ingresar directamente a la plataforma.
+            Tu cuenta ha sido creada exitosamente. Haz clic en el boton para verificar tu correo.
           </p>
           <div style="text-align:center;margin-bottom:1.25rem;">
-            <a href="${enlaceVerificacion}" 
+            <a href="${enlaceVerificacion}"
                style="display:inline-block;background:#2563eb;color:white;padding:0.875rem 2rem;border-radius:12px;text-decoration:none;font-weight:700;font-size:1rem;">
               Verificar mi cuenta
             </a>
           </div>
           <p style="color:#94a3b8;font-size:0.75rem;margin:0;text-align:center;">
-            Este enlace expira en 24 horas. Si no creaste esta cuenta, ignora este correo.
+            Este enlace expira en 24 horas.
           </p>
         </div>
       </div>
     `
   });
+
+  if (error) {
+    console.error('Error Resend MagicLink:', JSON.stringify(error));
+    throw new Error(error.message || 'Error al enviar Magic Link');
+  }
+
+  console.log('MagicLink enviado a:', email, '| ID:', data?.id);
 };
 
-// Email de recuperación de contraseña con OTP
+// Email OTP recuperacion de contrasena
 const enviarOTPRecuperacion = async (email, nombre, codigo) => {
-  await transporter.sendMail({
-    from: `"ARIA - Rescate Animal" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM,
     to: email,
     subject: 'Recupera tu contrasena - ARIA',
     html: `
@@ -102,6 +117,13 @@ const enviarOTPRecuperacion = async (email, nombre, codigo) => {
       </div>
     `
   });
+
+  if (error) {
+    console.error('Error Resend Recuperacion:', JSON.stringify(error));
+    throw new Error(error.message || 'Error al enviar OTP recuperacion');
+  }
+
+  console.log('OTP recuperacion enviado a:', email, '| ID:', data?.id);
 };
 
 module.exports = { enviarOTP, enviarMagicLink, enviarOTPRecuperacion };
