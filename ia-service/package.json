@@ -1,0 +1,19 @@
+{
+  "name": "aria-ia-service",
+  "version": "1.0.0",
+  "description": "Microservicio de IA para validacion de imagenes de animales - ARIA",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}

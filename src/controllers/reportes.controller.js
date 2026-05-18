@@ -1,11 +1,13 @@
 const pool = require('../db');
+const { validarAnimal } = require('../config/ia');
 
 // GET /api/reportes
 const getReportes = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
-              foto, estado, reportadoPor, usuario_id, fecha
+              foto, estado, reportadoPor, usuario_id, fecha,
+              especie_detectada, es_animal_verificado
        FROM reportes
        ORDER BY fecha DESC`
     );
@@ -29,7 +31,8 @@ const getMisReportes = async (req, res) => {
 
     const [rows] = await pool.query(
       `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
-              foto, estado, reportadoPor, fecha
+              foto, estado, reportadoPor, fecha,
+              especie_detectada, es_animal_verificado
        FROM reportes
        WHERE usuario_id = ?
        ORDER BY fecha DESC
@@ -53,7 +56,8 @@ const getReporte = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
-              foto, estado, reportadoPor, usuario_id, fecha
+              foto, estado, reportadoPor, usuario_id, fecha,
+              especie_detectada, es_animal_verificado
        FROM reportes WHERE id = ?`,
       [req.params.id]
     );
@@ -96,12 +100,30 @@ const crearReporte = async (req, res) => {
       return res.status(400).json({ message: 'Especie, descripcion y ubicacion son obligatorios' });
     }
 
-    // Validacion minimo 20 caracteres (HU-002)
     if (descripcion.trim().length < 20) {
       return res.status(400).json({ message: 'La descripcion debe tener al menos 20 caracteres' });
     }
 
     const fotoUrl = req.file ? req.file.path : null;
+
+    // Validar imagen con IA si se subió foto
+    let especieDetectada = null;
+    let esAnimalVerificado = 0;
+
+    if (fotoUrl) {
+      const resultadoIA = await validarAnimal(fotoUrl);
+
+      if (!resultadoIA.error && resultadoIA.esAnimal === false) {
+        return res.status(400).json({
+          message: 'La imagen no corresponde a un animal. Por favor sube una foto correcta.'
+        });
+      }
+
+      if (!resultadoIA.error && resultadoIA.esAnimal === true) {
+        especieDetectada  = resultadoIA.especieDetectada;
+        esAnimalVerificado = 1;
+      }
+    }
 
     const [usuarios] = await pool.query(
       "SELECT nombre FROM usuarios WHERE id = ?",
@@ -111,18 +133,15 @@ const crearReporte = async (req, res) => {
 
     const [result] = await pool.query(
       `INSERT INTO reportes
-       (especie, descripcion, ubicacion, latitud, longitud, foto, estado, reportadoPor, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (especie, descripcion, ubicacion, latitud, longitud, foto, estado,
+        reportadoPor, usuario_id, especie_detectada, es_animal_verificado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        especie,
-        descripcion,
-        ubicacion,
+        especie, descripcion, ubicacion,
         latitud  ? parseFloat(latitud)  : null,
         longitud ? parseFloat(longitud) : null,
-        fotoUrl,
-        'urgente',
-        reportadoPor,
-        req.user.id
+        fotoUrl, 'urgente', reportadoPor, req.user.id,
+        especieDetectada, esAnimalVerificado
       ]
     );
 
@@ -139,7 +158,9 @@ const crearReporte = async (req, res) => {
         longitud: longitud ? parseFloat(longitud) : null,
         foto: fotoUrl,
         estado: 'urgente',
-        reportadoPor
+        reportadoPor,
+        especie_detectada: especieDetectada,
+        es_animal_verificado: esAnimalVerificado
       }
     });
   } catch (error) {
