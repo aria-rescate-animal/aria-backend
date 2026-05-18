@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+const cors    = require('cors');
 const session = require('express-session');
 require('dotenv').config();
 
@@ -9,6 +9,7 @@ const reportesRoutes       = require('./src/routes/reportes.routes');
 const notificacionesRoutes = require('./src/routes/notificaciones.routes');
 const adminRoutes          = require('./src/routes/admin.routes');
 const validarAnimalRoutes  = require('./src/routes/validar-animal.routes');
+const mascotasRoutes       = require('./src/routes/mascotas.routes');
 
 const app = express();
 
@@ -30,11 +31,12 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Rutas
-app.use('/api/auth',           authRoutes);
-app.use('/api/reportes',       reportesRoutes);
-app.use('/api/notificaciones', notificacionesRoutes);
-app.use('/api/admin',          adminRoutes);
-app.use('/api/validar-animal', validarAnimalRoutes);
+app.use('/api/auth',              authRoutes);
+app.use('/api/reportes',          reportesRoutes);
+app.use('/api/notificaciones',    notificacionesRoutes);
+app.use('/api/admin',             adminRoutes);
+app.use('/api/validar-animal',    validarAnimalRoutes);
+app.use('/api/mascotas-perdidas', mascotasRoutes);
 
 app.get('/', (req, res) => res.json({ message: 'ARIA Backend v3.0' }));
 
