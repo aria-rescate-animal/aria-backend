@@ -3,14 +3,19 @@ const pool = require('../db');
 // GET /api/reportes
 const getReportes = async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT * FROM reportes ORDER BY fecha DESC");
+    const [rows] = await pool.query(
+      `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
+              foto, estado, reportadoPor, usuario_id, fecha
+       FROM reportes
+       ORDER BY fecha DESC`
+    );
     res.status(200).json(rows);
   } catch (error) {
     res.status(500).json({ error: "Error al cargar reportes" });
   }
 };
 
-// GET /api/reportes/mis-reportes — Solo los reportes del usuario autenticado
+// GET /api/reportes/mis-reportes
 const getMisReportes = async (req, res) => {
   try {
     const page   = Math.max(1, parseInt(req.query.page)  || 1);
@@ -23,7 +28,8 @@ const getMisReportes = async (req, res) => {
     );
 
     const [rows] = await pool.query(
-      `SELECT id, especie, descripcion, ubicacion, foto, estado, reportadoPor, fecha
+      `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
+              foto, estado, reportadoPor, fecha
        FROM reportes
        WHERE usuario_id = ?
        ORDER BY fecha DESC
@@ -45,7 +51,12 @@ const getMisReportes = async (req, res) => {
 // GET /api/reportes/:id
 const getReporte = async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT * FROM reportes WHERE id = ?", [req.params.id]);
+    const [rows] = await pool.query(
+      `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
+              foto, estado, reportadoPor, usuario_id, fecha
+       FROM reportes WHERE id = ?`,
+      [req.params.id]
+    );
     if (rows.length === 0) return res.status(404).json({ message: 'Reporte no encontrado' });
     res.status(200).json(rows[0]);
   } catch (error) {
@@ -53,13 +64,13 @@ const getReporte = async (req, res) => {
   }
 };
 
-// Notificar SOLO a entidades aprobadas
+// Notificar a entidades aprobadas
 const notificarAEntidades = async (reporteId, especie, ubicacion) => {
   try {
     const [entidades] = await pool.query(
       "SELECT id FROM usuarios WHERE rol = 'entidad' AND aprobacion_pendiente = 0"
     );
-    const titulo = 'Nuevo animal necesita atencion';
+    const titulo  = 'Nuevo animal necesita atencion';
     const mensaje = `Un ciudadano reporto un ${especie} en situacion de calle en ${ubicacion}. Revisa el caso.`;
     for (const entidad of entidades) {
       await pool.query(
@@ -72,33 +83,64 @@ const notificarAEntidades = async (reporteId, especie, ubicacion) => {
   }
 };
 
-// POST /api/reportes — Solo ciudadanos crean reportes
+// POST /api/reportes
 const crearReporte = async (req, res) => {
   try {
     if (req.user.rol !== 'ciudadano') {
       return res.status(403).json({ message: 'Solo los ciudadanos pueden crear reportes' });
     }
 
-    const { especie, descripcion, ubicacion } = req.body;
+    const { especie, descripcion, ubicacion, latitud, longitud } = req.body;
+
     if (!especie || !descripcion || !ubicacion) {
       return res.status(400).json({ message: 'Especie, descripcion y ubicacion son obligatorios' });
     }
 
+    // Validacion minimo 20 caracteres (HU-002)
+    if (descripcion.trim().length < 20) {
+      return res.status(400).json({ message: 'La descripcion debe tener al menos 20 caracteres' });
+    }
+
     const fotoUrl = req.file ? req.file.path : null;
 
-    const [usuarios] = await pool.query("SELECT nombre FROM usuarios WHERE id = ?", [req.user.id]);
+    const [usuarios] = await pool.query(
+      "SELECT nombre FROM usuarios WHERE id = ?",
+      [req.user.id]
+    );
     const reportadoPor = usuarios.length > 0 ? usuarios[0].nombre : 'Ciudadano';
 
     const [result] = await pool.query(
-      "INSERT INTO reportes (especie, descripcion, ubicacion, foto, estado, reportadoPor, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [especie, descripcion, ubicacion, fotoUrl, 'urgente', reportadoPor, req.user.id]
+      `INSERT INTO reportes
+       (especie, descripcion, ubicacion, latitud, longitud, foto, estado, reportadoPor, usuario_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        especie,
+        descripcion,
+        ubicacion,
+        latitud  ? parseFloat(latitud)  : null,
+        longitud ? parseFloat(longitud) : null,
+        fotoUrl,
+        'urgente',
+        reportadoPor,
+        req.user.id
+      ]
     );
 
     await notificarAEntidades(result.insertId, especie, ubicacion);
 
     res.status(201).json({
       message: 'Reporte creado exitosamente',
-      reporte: { id: result.insertId, especie, descripcion, ubicacion, foto: fotoUrl, estado: 'urgente', reportadoPor }
+      reporte: {
+        id: result.insertId,
+        especie,
+        descripcion,
+        ubicacion,
+        latitud:  latitud  ? parseFloat(latitud)  : null,
+        longitud: longitud ? parseFloat(longitud) : null,
+        foto: fotoUrl,
+        estado: 'urgente',
+        reportadoPor
+      }
     });
   } catch (error) {
     console.error("Error al crear reporte:", error);
@@ -106,7 +148,7 @@ const crearReporte = async (req, res) => {
   }
 };
 
-// PATCH /api/reportes/:id/estado — Solo entidades aprobadas
+// PATCH /api/reportes/:id/estado
 const actualizarEstado = async (req, res) => {
   try {
     if (req.user.rol !== 'entidad' && req.user.rol !== 'administrador') {
@@ -115,10 +157,11 @@ const actualizarEstado = async (req, res) => {
 
     if (req.user.rol === 'entidad') {
       const [ent] = await pool.query(
-        'SELECT aprobacion_pendiente FROM usuarios WHERE id = ?', [req.user.id]
+        'SELECT aprobacion_pendiente FROM usuarios WHERE id = ?',
+        [req.user.id]
       );
       if (ent.length > 0 && ent[0].aprobacion_pendiente === 1) {
-        return res.status(403).json({ message: 'Tu cuenta aun no ha sido aprobada por un administrador' });
+        return res.status(403).json({ message: 'Tu cuenta aun no ha sido aprobada' });
       }
     }
 
@@ -128,16 +171,23 @@ const actualizarEstado = async (req, res) => {
       return res.status(400).json({ message: 'Estado invalido' });
     }
 
-    const [reportes] = await pool.query("SELECT * FROM reportes WHERE id = ?", [req.params.id]);
+    const [reportes] = await pool.query(
+      "SELECT * FROM reportes WHERE id = ?",
+      [req.params.id]
+    );
     if (reportes.length === 0) return res.status(404).json({ message: 'Reporte no encontrado' });
     const reporte = reportes[0];
 
-    await pool.query("UPDATE reportes SET estado = ? WHERE id = ?", [estado, req.params.id]);
+    await pool.query(
+      "UPDATE reportes SET estado = ? WHERE id = ?",
+      [estado, req.params.id]
+    );
 
     if (estado === 'rescatado') {
       await pool.query(
         "INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)",
-        [reporte.usuario_id, 'Tu reporte fue rescatado',
+        [reporte.usuario_id,
+         'Tu reporte fue rescatado',
          `El ${reporte.especie} que reportaste en "${reporte.ubicacion}" fue rescatado. Gracias por tu ayuda.`,
          reporte.id]
       );
@@ -146,7 +196,8 @@ const actualizarEstado = async (req, res) => {
     if (estado === 'en proceso') {
       await pool.query(
         "INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)",
-        [reporte.usuario_id, 'Tu reporte esta siendo atendido',
+        [reporte.usuario_id,
+         'Tu reporte esta siendo atendido',
          `Una entidad esta atendiendo el caso del ${reporte.especie} que reportaste en "${reporte.ubicacion}".`,
          reporte.id]
       );
@@ -161,7 +212,10 @@ const actualizarEstado = async (req, res) => {
 // DELETE /api/reportes/:id
 const eliminarReporte = async (req, res) => {
   try {
-    const [result] = await pool.query("DELETE FROM reportes WHERE id = ?", [req.params.id]);
+    const [result] = await pool.query(
+      "DELETE FROM reportes WHERE id = ?",
+      [req.params.id]
+    );
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Reporte no encontrado' });
     res.status(200).json({ message: 'Reporte eliminado' });
   } catch (error) {
@@ -169,4 +223,11 @@ const eliminarReporte = async (req, res) => {
   }
 };
 
-module.exports = { getReportes, getMisReportes, getReporte, crearReporte, actualizarEstado, eliminarReporte };
+module.exports = {
+  getReportes,
+  getMisReportes,
+  getReporte,
+  crearReporte,
+  actualizarEstado,
+  eliminarReporte
+};
