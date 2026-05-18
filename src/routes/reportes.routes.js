@@ -7,18 +7,16 @@ const {
   getMisReportes,
   getReporte,
   crearReporte,
+  reportarInvalido,
   actualizarEstado,
   eliminarReporte
 } = require('../controllers/reportes.controller');
 
 router.get('/', verificarToken, getReportes);
-
-// IMPORTANTE: /mis-reportes DEBE ir antes de /:id
-// Si va después, Express interpreta "mis-reportes" como un :id
 router.get('/mis-reportes', verificarToken, getMisReportes);
-
 router.get('/:id', verificarToken, getReporte);
 router.post('/', verificarToken, upload.single('foto'), crearReporte);
+router.post('/:id/reportar', verificarToken, reportarInvalido);
 router.patch('/:id/estado', verificarToken, actualizarEstado);
 router.delete('/:id', verificarToken, eliminarReporte);
 

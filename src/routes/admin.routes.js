@@ -60,13 +60,14 @@ router.get('/estadisticas', verificarToken, soloAdmin, async (req, res) => {
     const [[{ pendientes }]]     = await pool.query('SELECT COUNT(*) as pendientes FROM usuarios WHERE aprobacion_pendiente = 1');
     const [[{ rescatados }]]     = await pool.query("SELECT COUNT(*) as rescatados FROM reportes WHERE estado = 'rescatado'");
     const [[{ bloqueados }]]     = await pool.query('SELECT COUNT(*) as bloqueados FROM usuarios WHERE bloqueado = 1');
-    res.json({ total_usuarios, total_reportes, pendientes, rescatados, bloqueados });
+    const [[{ invalidos }]]      = await pool.query('SELECT COUNT(*) as invalidos FROM reportes WHERE reportado_invalido = 1');
+    res.json({ total_usuarios, total_reportes, pendientes, rescatados, bloqueados, invalidos });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener estadisticas' });
   }
 });
 
-// GET /api/admin/usuarios — Lista todos los usuarios paginada
+// GET /api/admin/usuarios
 router.get('/usuarios', verificarToken, soloAdmin, async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
@@ -83,27 +84,21 @@ router.get('/usuarios', verificarToken, soloAdmin, async (req, res) => {
       [limit, offset]
     );
 
-    res.json({
-      usuarios: rows,
-      total,
-      pagina: page,
-      totalPaginas: Math.ceil(total / limit)
-    });
+    res.json({ usuarios: rows, total, pagina: page, totalPaginas: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener usuarios' });
   }
 });
 
-// PATCH /api/admin/usuarios/:id/bloquear — Bloquear o desbloquear un usuario
+// PATCH /api/admin/usuarios/:id/bloquear
 router.patch('/usuarios/:id/bloquear', verificarToken, soloAdmin, async (req, res) => {
   try {
     const { accion } = req.body;
 
     if (!['bloquear', 'desbloquear'].includes(accion)) {
-      return res.status(400).json({ error: 'Accion invalida. Usa "bloquear" o "desbloquear"' });
+      return res.status(400).json({ error: 'Accion invalida' });
     }
 
-    // No permitir que el admin se bloquee a si mismo
     if (parseInt(req.params.id) === req.user.id) {
       return res.status(400).json({ error: 'No puedes bloquearte a ti mismo' });
     }
@@ -111,7 +106,6 @@ router.patch('/usuarios/:id/bloquear', verificarToken, soloAdmin, async (req, re
     const [rows] = await pool.query('SELECT id, nombre, rol FROM usuarios WHERE id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    // No permitir bloquear a otro administrador
     if (rows[0].rol === 'administrador') {
       return res.status(400).json({ error: 'No se puede bloquear a un administrador' });
     }
@@ -119,11 +113,10 @@ router.patch('/usuarios/:id/bloquear', verificarToken, soloAdmin, async (req, re
     const nuevoBloqueado = accion === 'bloquear' ? 1 : 0;
     await pool.query('UPDATE usuarios SET bloqueado = ? WHERE id = ?', [nuevoBloqueado, req.params.id]);
 
-    // Notificar al usuario afectado
     const titulo  = accion === 'bloquear' ? 'Cuenta suspendida' : 'Cuenta reactivada';
     const mensaje = accion === 'bloquear'
-      ? 'Tu cuenta ha sido suspendida por el administrador. Contacta al soporte si crees que es un error.'
-      : 'Tu cuenta ha sido reactivada. Ya puedes volver a iniciar sesion.';
+      ? 'Tu cuenta ha sido suspendida por el administrador.'
+      : 'Tu cuenta ha sido reactivada.';
 
     await pool.query(
       'INSERT INTO notificaciones (usuario_id, titulo, mensaje) VALUES (?, ?, ?)',
@@ -136,8 +129,51 @@ router.patch('/usuarios/:id/bloquear', verificarToken, soloAdmin, async (req, re
       bloqueado: nuevoBloqueado
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Error al procesar la accion' });
+  }
+});
+
+// GET /api/admin/reportes-invalidos — reportes marcados como invalidos
+router.get('/reportes-invalidos', verificarToken, soloAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, especie, descripcion, ubicacion, estado, motivo_reporte, fecha
+       FROM reportes
+       WHERE reportado_invalido = 1
+       ORDER BY fecha DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener reportes invalidos' });
+  }
+});
+
+// DELETE /api/admin/reportes/:id — admin elimina reporte invalido
+router.delete('/reportes/:id', verificarToken, soloAdmin, async (req, res) => {
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM reportes WHERE id = ?',
+      [req.params.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Reporte no encontrado' });
+    res.json({ message: 'Reporte eliminado correctamente', id: req.params.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al eliminar reporte' });
+  }
+});
+
+// GET /api/entidades — lista entidades aprobadas para que ciudadano elija
+router.get('/entidades', verificarToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, nombre, nombre_organizacion, tipo_entidad, telefono_oficial
+       FROM usuarios
+       WHERE rol = 'entidad' AND aprobacion_pendiente = 0 AND bloqueado = 0
+       ORDER BY nombre_organizacion ASC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener entidades' });
   }
 });
 

@@ -4,12 +4,27 @@ const { validarAnimal } = require('../config/ia');
 // GET /api/reportes
 const getReportes = async (req, res) => {
   try {
+    const { categoria } = req.query;
+    const condiciones = [];
+    const valores = [];
+
+    if (categoria) {
+      condiciones.push('r.categoria = ?');
+      valores.push(categoria);
+    }
+
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+
     const [rows] = await pool.query(
-      `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
-              foto, estado, reportadoPor, usuario_id, fecha,
-              especie_detectada, es_animal_verificado
-       FROM reportes
-       ORDER BY fecha DESC`
+      `SELECT r.id, r.especie, r.descripcion, r.ubicacion, r.latitud, r.longitud,
+              r.foto, r.estado, r.reportadoPor, r.usuario_id, r.fecha,
+              r.especie_detectada, r.es_animal_verificado,
+              r.categoria, r.reportado_invalido, r.motivo_reporte,
+              r.entidad_asignada_id
+       FROM reportes r
+       ${where}
+       ORDER BY r.fecha DESC`,
+      valores
     );
     res.status(200).json(rows);
   } catch (error) {
@@ -31,7 +46,7 @@ const getMisReportes = async (req, res) => {
 
     const [rows] = await pool.query(
       `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
-              foto, estado, reportadoPor, fecha,
+              foto, estado, reportadoPor, fecha, categoria,
               especie_detectada, es_animal_verificado
        FROM reportes
        WHERE usuario_id = ?
@@ -57,7 +72,8 @@ const getReporte = async (req, res) => {
     const [rows] = await pool.query(
       `SELECT id, especie, descripcion, ubicacion, latitud, longitud,
               foto, estado, reportadoPor, usuario_id, fecha,
-              especie_detectada, es_animal_verificado
+              especie_detectada, es_animal_verificado, categoria,
+              reportado_invalido, motivo_reporte, entidad_asignada_id
        FROM reportes WHERE id = ?`,
       [req.params.id]
     );
@@ -68,14 +84,29 @@ const getReporte = async (req, res) => {
   }
 };
 
-// Notificar a entidades aprobadas
-const notificarAEntidades = async (reporteId, especie, ubicacion) => {
+// Notificar entidades
+const notificarAEntidades = async (reporteId, especie, ubicacion, entidadAsignadaId) => {
   try {
-    const [entidades] = await pool.query(
-      "SELECT id FROM usuarios WHERE rol = 'entidad' AND aprobacion_pendiente = 0"
-    );
+    let entidades;
+
+    if (entidadAsignadaId) {
+      // Notificar solo a la entidad asignada
+      const [rows] = await pool.query(
+        "SELECT id FROM usuarios WHERE id = ? AND rol = 'entidad' AND aprobacion_pendiente = 0",
+        [entidadAsignadaId]
+      );
+      entidades = rows;
+    } else {
+      // Notificar a todas las entidades aprobadas
+      const [rows] = await pool.query(
+        "SELECT id FROM usuarios WHERE rol = 'entidad' AND aprobacion_pendiente = 0"
+      );
+      entidades = rows;
+    }
+
     const titulo  = 'Nuevo animal necesita atencion';
     const mensaje = `Un ciudadano reporto un ${especie} en situacion de calle en ${ubicacion}. Revisa el caso.`;
+
     for (const entidad of entidades) {
       await pool.query(
         "INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)",
@@ -94,7 +125,7 @@ const crearReporte = async (req, res) => {
       return res.status(403).json({ message: 'Solo los ciudadanos pueden crear reportes' });
     }
 
-    const { especie, descripcion, ubicacion, latitud, longitud } = req.body;
+    const { especie, descripcion, ubicacion, latitud, longitud, categoria, entidad_asignada_id } = req.body;
 
     if (!especie || !descripcion || !ubicacion) {
       return res.status(400).json({ message: 'Especie, descripcion y ubicacion son obligatorios' });
@@ -104,6 +135,9 @@ const crearReporte = async (req, res) => {
       return res.status(400).json({ message: 'La descripcion debe tener al menos 20 caracteres' });
     }
 
+    const categoriaFinal = ['herido','enfermo','abandonado','desnutrido','otro'].includes(categoria)
+      ? categoria : 'otro';
+
     const fotoUrl = req.file ? req.file.path : null;
 
     let especieDetectada   = null;
@@ -112,21 +146,18 @@ const crearReporte = async (req, res) => {
     if (fotoUrl) {
       const resultadoIA = await validarAnimal(fotoUrl);
 
-      // IA falló por problema de red o servicio no disponible
       if (resultadoIA.error) {
         return res.status(503).json({
-          message: 'El servicio de verificacion de imagenes no esta disponible en este momento. Por favor intenta de nuevo en unos minutos.'
+          message: 'El servicio de verificacion de imagenes no esta disponible. Por favor intenta de nuevo en unos minutos.'
         });
       }
 
-      // IA respondió que no es un animal
       if (resultadoIA.esAnimal === false) {
         return res.status(400).json({
           message: 'La imagen no corresponde a un animal. Por favor sube una foto correcta.'
         });
       }
 
-      // IA confirmó que es un animal
       if (resultadoIA.esAnimal === true) {
         especieDetectada   = resultadoIA.especieDetectada;
         esAnimalVerificado = 1;
@@ -142,38 +173,90 @@ const crearReporte = async (req, res) => {
     const [result] = await pool.query(
       `INSERT INTO reportes
        (especie, descripcion, ubicacion, latitud, longitud, foto, estado,
-        reportadoPor, usuario_id, especie_detectada, es_animal_verificado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        reportadoPor, usuario_id, especie_detectada, es_animal_verificado,
+        categoria, entidad_asignada_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         especie, descripcion, ubicacion,
         latitud  ? parseFloat(latitud)  : null,
         longitud ? parseFloat(longitud) : null,
         fotoUrl, 'urgente', reportadoPor, req.user.id,
-        especieDetectada, esAnimalVerificado
+        especieDetectada, esAnimalVerificado,
+        categoriaFinal,
+        entidad_asignada_id || null
       ]
     );
 
-    await notificarAEntidades(result.insertId, especie, ubicacion);
+    await notificarAEntidades(result.insertId, especie, ubicacion, entidad_asignada_id || null);
 
     res.status(201).json({
       message: 'Reporte creado exitosamente',
       reporte: {
         id: result.insertId,
-        especie,
-        descripcion,
-        ubicacion,
+        especie, descripcion, ubicacion,
         latitud:  latitud  ? parseFloat(latitud)  : null,
         longitud: longitud ? parseFloat(longitud) : null,
-        foto: fotoUrl,
-        estado: 'urgente',
-        reportadoPor,
+        foto: fotoUrl, estado: 'urgente', reportadoPor,
         especie_detectada: especieDetectada,
-        es_animal_verificado: esAnimalVerificado
+        es_animal_verificado: esAnimalVerificado,
+        categoria: categoriaFinal,
+        entidad_asignada_id: entidad_asignada_id || null
       }
     });
   } catch (error) {
     console.error("Error al crear reporte:", error);
     res.status(500).json({ error: "Error al guardar el reporte" });
+  }
+};
+
+// POST /api/reportes/:id/reportar — Solo entidades
+const reportarInvalido = async (req, res) => {
+  try {
+    if (req.user.rol !== 'entidad') {
+      return res.status(403).json({ message: 'Solo las entidades pueden reportar casos invalidos' });
+    }
+
+    const { motivo } = req.body;
+    if (!motivo || motivo.trim().length < 10) {
+      return res.status(400).json({ message: 'Debes indicar el motivo del reporte (minimo 10 caracteres)' });
+    }
+
+    const [reportes] = await pool.query(
+      'SELECT id, especie, ubicacion FROM reportes WHERE id = ?',
+      [req.params.id]
+    );
+    if (reportes.length === 0) return res.status(404).json({ message: 'Reporte no encontrado' });
+
+    await pool.query(
+      'UPDATE reportes SET reportado_invalido = 1, motivo_reporte = ? WHERE id = ?',
+      [motivo.trim(), req.params.id]
+    );
+
+    // Notificar al administrador
+    const [admins] = await pool.query(
+      "SELECT id FROM usuarios WHERE rol = 'administrador'"
+    );
+
+    for (const admin of admins) {
+      await pool.query(
+        'INSERT INTO notificaciones (usuario_id, titulo, mensaje, reporte_id) VALUES (?, ?, ?, ?)',
+        [
+          admin.id,
+          '⚠️ Reporte marcado como invalido',
+          `Una entidad reporto el caso #${req.params.id} (${reportes[0].especie} en ${reportes[0].ubicacion}) como invalido. Motivo: ${motivo}`,
+          req.params.id
+        ]
+      );
+    }
+
+    res.status(200).json({
+      message: 'Reporte enviado al administrador para revision',
+      id: req.params.id,
+      reportado_invalido: true
+    });
+  } catch (error) {
+    console.error("Error al reportar invalido:", error);
+    res.status(500).json({ error: "Error al reportar el caso" });
   }
 };
 
@@ -257,6 +340,7 @@ module.exports = {
   getMisReportes,
   getReporte,
   crearReporte,
+  reportarInvalido,
   actualizarEstado,
   eliminarReporte
 };
