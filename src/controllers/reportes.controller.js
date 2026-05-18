@@ -106,21 +106,29 @@ const crearReporte = async (req, res) => {
 
     const fotoUrl = req.file ? req.file.path : null;
 
-    // Validar imagen con IA si se subió foto
-    let especieDetectada = null;
+    let especieDetectada   = null;
     let esAnimalVerificado = 0;
 
     if (fotoUrl) {
       const resultadoIA = await validarAnimal(fotoUrl);
 
-      if (!resultadoIA.error && resultadoIA.esAnimal === false) {
+      // IA falló por problema de red o servicio no disponible
+      if (resultadoIA.error) {
+        return res.status(503).json({
+          message: 'El servicio de verificacion de imagenes no esta disponible en este momento. Por favor intenta de nuevo en unos minutos.'
+        });
+      }
+
+      // IA respondió que no es un animal
+      if (resultadoIA.esAnimal === false) {
         return res.status(400).json({
           message: 'La imagen no corresponde a un animal. Por favor sube una foto correcta.'
         });
       }
 
-      if (!resultadoIA.error && resultadoIA.esAnimal === true) {
-        especieDetectada  = resultadoIA.especieDetectada;
+      // IA confirmó que es un animal
+      if (resultadoIA.esAnimal === true) {
+        especieDetectada   = resultadoIA.especieDetectada;
         esAnimalVerificado = 1;
       }
     }
