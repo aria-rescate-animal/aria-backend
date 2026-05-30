@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const esPasswordValido = (password) => password.length >= 8;
 const esEmailValido = (email) => email.includes('@');
-const esRolValido = (rol) => rol === 'ciudadano' || rol === 'administrador';
+const esRolValido = (rol) => ['ciudadano', 'entidad', 'administrador'].includes(rol);
 
 
 test('Validar que la contraseña sea de al menos 8 caracteres', () => {
@@ -24,7 +24,9 @@ test('Validar que el correo tenga el arroba', () => {
 
 test('Validar que los roles sean solo los que existen en la BD', () => {
   // Rol normal del sistema
-  assert.strictEqual(esRolValido('ciudadano'), true); 
+  assert.strictEqual(esRolValido('ciudadano'), true);
+  assert.strictEqual(esRolValido('entidad'), true);
+  assert.strictEqual(esRolValido('administrador'), true); 
   
   // Si mandan un rol inventado lo tiene que rebotar
   assert.strictEqual(esRolValido('hacker'), false);   

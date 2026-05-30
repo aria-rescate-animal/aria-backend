@@ -1,11 +1,12 @@
 {
   "name": "aria-backend",
   "version": "1.0.0",
-  "description": "<p align=\"center\">\r   <a href=\"http://nestjs.com/\" target=\"blank\"><img src=\"https://nestjs.com/img/logo-small.svg\" width=\"120\" alt=\"Nest Logo\" /></a>\r </p>",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "crear-admin": "node scripts/crear-admin.js",
+    "test": "node --test"
   },
   "repository": {
     "type": "git",
@@ -14,30 +15,24 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/aria-rescate-animal/aria-backend/issues"
-  },
-  "homepage": "https://github.com/aria-rescate-animal/aria-backend#readme",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "axios": "^1.16.1",
-    "bcryptjs": "^3.0.3",
-    "cloudinary": "^1.41.3",
-    "cors": "^2.8.6",
-    "crypto": "^1.0.1",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^2.1.1",
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.5.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
-    "mysql2": "^3.22.1",
+    "mysql2": "^3.11.4",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
-    "resend": "^6.12.3"
+    "resend": "^4.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.7"
   }
 }

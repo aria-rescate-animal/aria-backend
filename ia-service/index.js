@@ -16,10 +16,8 @@ const app = express();
 app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(express.json());
 
-// Ruta principal de validación
 app.use('/validar', validarRoutes);
 
-// Health check
 app.get('/', (req, res) => res.json({
   servicio: 'ARIA IA Service',
   version: '1.0.0',

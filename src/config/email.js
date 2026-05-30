@@ -1,7 +1,6 @@
 // ============================================================
 // ARIA — Servicio de correo con Resend
 // Dominio: ariaproyecto.online
-// Funciona en cualquier red — reemplaza Nodemailer
 // ============================================================
 
 const { Resend } = require('resend');
@@ -9,7 +8,6 @@ const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = `ARIA Rescate Animal <aria@ariaproyecto.online>`;
 
-// Email con código OTP de 6 dígitos
 const enviarOTP = async (email, codigo, nombre) => {
   const { data, error } = await resend.emails.send({
     from: FROM,
@@ -48,7 +46,6 @@ const enviarOTP = async (email, codigo, nombre) => {
   console.log('OTP enviado a:', email, '| ID:', data?.id);
 };
 
-// Email con Magic Link
 const enviarMagicLink = async (email, nombre, enlaceVerificacion) => {
   const { data, error } = await resend.emails.send({
     from: FROM,
@@ -87,7 +84,6 @@ const enviarMagicLink = async (email, nombre, enlaceVerificacion) => {
   console.log('MagicLink enviado a:', email, '| ID:', data?.id);
 };
 
-// Email OTP recuperacion de contrasena
 const enviarOTPRecuperacion = async (email, nombre, codigo) => {
   const { data, error } = await resend.emails.send({
     from: FROM,
