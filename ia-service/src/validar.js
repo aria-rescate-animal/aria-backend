@@ -1,8 +1,3 @@
-// ============================================================
-// ARIA IA Service — Endpoint de validación
-// POST /validar — recibe URL de imagen, llama a Gemini
-// ============================================================
-
 const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
@@ -14,9 +9,6 @@ const urlABase64 = async (url) => {
   return { base64, mimeType };
 };
 
-// POST /validar
-// Body: { fotoUrl: "https://..." }
-// Respuesta: { esAnimal, especieDetectada, confianza, mensaje }
 router.post('/', async (req, res) => {
   try {
     const { fotoUrl } = req.body;
@@ -29,16 +21,31 @@ router.post('/', async (req, res) => {
 
     const prompt = `Analiza esta imagen y responde ÚNICAMENTE en formato JSON con esta estructura exacta, sin texto adicional:
 {
-  "esAnimal": true o false,
-  "especie": "nombre del animal en español o null si no es animal",
+  "esAnimalReal": true o false,
+  "especie": "nombre del animal en español o null",
   "confianza": número del 0 al 100,
-  "descripcion": "descripción breve en español de lo que ves"
+  "motivo_rechazo": "razón si no es válida o null si es válida",
+  "descripcion": "descripción breve en español"
 }
 
-Reglas:
-- esAnimal true si hay cualquier animal (perro, gato, caballo, vaca, ave, reptil, etc)
-- esAnimal false si no hay ningún animal en la imagen
-- Responde SOLO el JSON sin markdown ni explicaciones`;
+Reglas ESTRICTAS — lee con atención:
+
+1. esAnimalReal = true SOLO si la imagen es una FOTOGRAFÍA REAL de un animal vivo.
+   Ejemplos válidos: foto de un perro real, foto de un gato callejero, foto de un ave herida.
+
+2. esAnimalReal = false en TODOS estos casos:
+   - Dibujos animados, caricaturas, anime o ilustraciones (aunque representen animales)
+   - Figuras de juguete, peluches o esculturas de animales
+   - Logos, íconos o imágenes vectoriales de animales
+   - Imágenes generadas por computadora (CGI) o inteligencia artificial
+   - Capturas de pantalla de videojuegos con animales
+   - Imágenes de personas, paisajes, objetos, comida u otras cosas sin animales reales
+   - Imágenes muy borrosas o de muy baja calidad donde no se puede confirmar que es un animal real
+
+3. motivo_rechazo: si esAnimalReal es false, describe brevemente POR QUÉ en español.
+   Ejemplos: "Es un dibujo animado, no una fotografía real", "Es un peluche, no un animal vivo", "No hay animales en la imagen"
+
+4. Responde SOLO el JSON, sin markdown ni texto adicional.`;
 
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -53,26 +60,29 @@ Reglas:
       { headers: { 'Content-Type': 'application/json' } }
     );
 
-    const texto     = response.data.candidates[0].content.parts[0].text.trim();
+    const texto      = response.data.candidates[0].content.parts[0].text.trim();
     const jsonLimpio = texto.replace(/```json|```/g, '').trim();
-    const datos     = JSON.parse(jsonLimpio);
+    const datos      = JSON.parse(jsonLimpio);
+
+    const esValido = datos.esAnimalReal === true;
 
     res.status(200).json({
-      esAnimal:         datos.esAnimal === true,
-      especieDetectada: datos.especie  || null,
+      esAnimal:         esValido,
+      especieDetectada: esValido ? (datos.especie || null) : null,
       confianza:        datos.confianza || 0,
       descripcion:      datos.descripcion || '',
-      mensaje: datos.esAnimal
-        ? `Animal detectado: ${datos.especie} (${datos.confianza}% de confianza)`
-        : 'No se detectó ningún animal en la imagen'
+      motivo_rechazo:   esValido ? null : (datos.motivo_rechazo || 'La imagen no corresponde a un animal real'),
+      mensaje: esValido
+        ? `Animal real detectado: ${datos.especie} (${datos.confianza}% de confianza)`
+        : (datos.motivo_rechazo || 'La imagen no corresponde a un animal real fotografiado')
     });
 
   } catch (error) {
     console.error('Error IA Service:', error.response?.data?.error?.message || error.message);
     res.status(500).json({
       esAnimal: null,
-      error: true,
-      mensaje: 'No se pudo analizar la imagen con IA'
+      error:    true,
+      mensaje:  'No se pudo analizar la imagen con IA'
     });
   }
 });
