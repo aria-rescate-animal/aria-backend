@@ -62,6 +62,8 @@ const getReportes = async (req, res) => {
       }
       conds.push('r.entidad_asignada_id = ?');
       vals.push(req.user.id);
+      conds.push('r.reportado_invalido = 0');
+      conds.push("r.estado <> 'requiere_revision'");
     }
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
@@ -92,9 +94,21 @@ const getMisReportes = async (req, res) => {
     const page   = Math.max(1, parseInt(req.query.page)  || 1);
     const limit  = Math.min(20, parseInt(req.query.limit) || 20);
     const offset = (page - 1) * limit;
+    const estadosPermitidos = ['pendiente', 'en_atencion', 'rescatado', 'no_procede', 'requiere_revision'];
+    const estado = estadosPermitidos.includes(req.query.estado) ? req.query.estado : null;
+    const filtros = ['r.usuario_id = ?', 'r.reportado_invalido = 0'];
+    const valores = [req.user.id];
+
+    if (estado) {
+      filtros.push('r.estado = ?');
+      valores.push(estado);
+    }
+
+    const where = filtros.join(' AND ');
 
     const [[{ total }]] = await pool.query(
-      'SELECT COUNT(*) as total FROM reportes WHERE usuario_id = ?', [req.user.id]
+      `SELECT COUNT(*) as total FROM reportes r WHERE ${where}`,
+      valores
     );
     const [rows] = await pool.query(
       `SELECT r.id, r.especie, r.descripcion, r.ubicacion, r.foto,
@@ -106,10 +120,10 @@ const getMisReportes = async (req, res) => {
               u.tipo_entidad        AS entidad_tipo
        FROM reportes r
        LEFT JOIN usuarios u ON r.entidad_asignada_id = u.id
-       WHERE r.usuario_id = ?
+       WHERE ${where}
        ORDER BY r.fecha DESC
        LIMIT ? OFFSET ?`,
-      [req.user.id, limit, offset]
+      [...valores, limit, offset]
     );
     res.status(200).json({ reportes: rows, total, pagina: page, totalPaginas: Math.ceil(total / limit) });
   } catch (error) {
@@ -130,7 +144,7 @@ const getReporte = async (req, res) => {
     const r = rows[0];
     if (req.user.rol === 'ciudadano' && r.usuario_id !== req.user.id)
       return res.status(403).json({ message: 'No tienes permiso para ver este reporte.' });
-    if (req.user.rol === 'entidad' && r.entidad_asignada_id !== req.user.id)
+    if (req.user.rol === 'entidad' && (r.entidad_asignada_id !== req.user.id || r.estado === 'requiere_revision' || r.reportado_invalido === 1))
       return res.status(403).json({ message: 'Este reporte no está asignado a tu entidad.' });
     res.status(200).json(r);
   } catch (error) {
@@ -304,6 +318,17 @@ const reportarInvalido = async (req, res) => {
         'INSERT INTO notificaciones (usuario_id, titulo, mensaje) VALUES (?, ?, ?)',
         [a.id, 'Un reporte requiere revisión',
          `${tipoLabel} — caso #${req.params.id} (${reportes[0].especie}). Motivo: ${motivo}`]
+      );
+    }
+
+    if (reportes[0].usuario_id) {
+      await pool.query(
+        'INSERT INTO notificaciones (usuario_id, titulo, mensaje) VALUES (?, ?, ?)',
+        [
+          reportes[0].usuario_id,
+          'Tu reporte está en revisión',
+          `La entidad reportó el caso de ${reportes[0].especie} para revisión administrativa. Motivo: ${motivo.trim()}`
+        ]
       );
     }
 

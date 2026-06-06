@@ -145,7 +145,8 @@ CREATE TABLE verificaciones_otp (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_otp_email (email),
   KEY idx_otp_codigo (codigo),
-  KEY idx_otp_usado (usado)
+  KEY idx_otp_usado (usado),
+  KEY idx_otp_expira_en (expira_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE tokens_recuperacion (
@@ -158,6 +159,7 @@ CREATE TABLE tokens_recuperacion (
   KEY idx_tokens_usuario (usuario_id),
   KEY idx_tokens_token (token),
   KEY idx_tokens_usado (usado),
+  KEY idx_tokens_expira_en (expira_en),
   CONSTRAINT fk_tokens_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

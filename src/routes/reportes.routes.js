@@ -1,7 +1,6 @@
 const express  = require('express')
 const router   = express.Router()
 const verificarToken         = require('../middlewares/auth.middleware')
-const { optionalAuth }       = require('../middlewares/auth.middleware')
 const { upload }             = require('../config/cloudinary')
 const {
   getReportes,
