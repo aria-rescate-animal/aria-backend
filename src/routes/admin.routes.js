@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const verificarToken = require('../middlewares/auth.middleware');
 const pool = require('../db');
+const { enviarCorreoEntidadAprobada, enviarCorreoEntidadRechazada } = require('../config/email');
 const { normalizarCategoria, serviciosCompatiblesCategoria, serviciosToArray, categoriaRequiereRevision } = require('../utils/aria.constants');
 
 const soloAdmin = (req, res, next) => {
@@ -66,7 +67,7 @@ router.patch('/aprobar-entidad/:id', verificarToken, soloAdmin, async (req, res)
       return res.status(400).json({ error: 'Acción inválida' });
 
     const [rows] = await pool.query(
-      `SELECT id, nombre_organizacion, nit, tipo_entidad, telefono_oficial, telefono,
+      `SELECT id, nombre, email, nombre_organizacion, nit, tipo_entidad, telefono_oficial, telefono,
               ciudad, representante, descripcion_entidad, servicios_ofrecidos,
               aprobacion_pendiente, estado_aprobacion, bloqueado
        FROM usuarios WHERE id = ? AND rol = "entidad"`,
@@ -95,6 +96,11 @@ router.patch('/aprobar-entidad/:id', verificarToken, soloAdmin, async (req, res)
         [req.params.id, 'Tu entidad fue aprobada',
          'Tu solicitud fue revisada y aprobada. Ya puedes recibir reportes y gestionar casos.']
       );
+      try {
+        await enviarCorreoEntidadAprobada(entidad.email, entidad.nombre_organizacion || entidad.nombre);
+      } catch (emailErr) {
+        console.error('Error correo entidad aprobada:', emailErr.message);
+      }
       return res.json({ message: 'Entidad aprobada correctamente.' });
     }
 
@@ -111,6 +117,11 @@ router.patch('/aprobar-entidad/:id', verificarToken, soloAdmin, async (req, res)
       [req.params.id, 'Solicitud de entidad rechazada',
        `Tu solicitud fue revisada y no fue aprobada. Motivo: ${motivoFinal}`]
     );
+    try {
+      await enviarCorreoEntidadRechazada(entidad.email, entidad.nombre_organizacion || entidad.nombre, motivoFinal);
+    } catch (emailErr) {
+      console.error('Error correo entidad rechazada:', emailErr.message);
+    }
     res.json({ message: 'Entidad rechazada. El motivo fue guardado.' });
   } catch (err) {
     console.error('Error aprobar/rechazar entidad:', err);
@@ -240,6 +251,16 @@ router.delete('/usuarios/:id', verificarToken, soloAdmin, async (req, res) => {
     const [rows] = await pool.query('SELECT id, rol FROM usuarios WHERE id = ?', [id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (rows[0].rol === 'administrador') return res.status(400).json({ error: 'No se puede eliminar a un administrador' });
+    if (rows[0].rol === 'entidad') {
+      await pool.query(
+        `UPDATE reportes
+         SET estado = 'requiere_revision',
+             entidad_asignada_id = NULL
+         WHERE entidad_asignada_id = ?
+           AND estado IN ('pendiente', 'en_atencion')`,
+        [id]
+      );
+    }
     await pool.query('DELETE FROM notificaciones WHERE usuario_id = ?', [id]);
     await pool.query('DELETE FROM mascotas_perdidas WHERE usuario_id = ?', [id]);
     await pool.query('DELETE FROM tokens_recuperacion WHERE usuario_id = ?', [id]);
@@ -258,12 +279,12 @@ router.get('/reportes-invalidos', verificarToken, soloAdmin, async (req, res) =>
       `SELECT r.id, r.especie, r.descripcion, r.ubicacion, r.categoria, r.estado,
               r.prioridad, r.motivo_reporte, r.tipo_reporte_invalido, r.fecha,
               r.entidad_asignada_id, r.foto,
-              u.nombre AS reportadoPor
+              u.nombre AS reportadoPor,
+              ent.nombre_organizacion AS entidad_nombre
        FROM reportes r
        LEFT JOIN usuarios u ON r.usuario_id = u.id
+       LEFT JOIN usuarios ent ON r.entidad_asignada_id = ent.id
        WHERE r.reportado_invalido = 1
-          OR r.estado = 'requiere_revision'
-          OR r.entidad_asignada_id IS NULL
        ORDER BY r.fecha DESC`
     );
     res.json(rows);
@@ -336,7 +357,14 @@ router.patch('/reportes/:id/asignar', verificarToken, soloAdmin, async (req, res
     const notaFinal = nota?.trim() || null;
     const nuevoEstado = reporte.estado === 'requiere_revision' ? 'pendiente' : reporte.estado;
     await pool.query(
-      `UPDATE reportes SET entidad_asignada_id = ?, estado = ?, nota_entidad = COALESCE(?, nota_entidad)
+      `UPDATE reportes SET
+          entidad_asignada_id = ?,
+          estado = ?,
+          nota_entidad = COALESCE(?, nota_entidad),
+          reportado_invalido = 0,
+          motivo_reporte = NULL,
+          motivo_invalido = NULL,
+          tipo_reporte_invalido = NULL
        WHERE id = ?`,
       [entidad_id, nuevoEstado, notaFinal, req.params.id]
     );

@@ -25,7 +25,7 @@ app.get('/', (req, res) => res.json({
   modelo: 'Google Gemini 2.5 Flash'
 }));
 
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`ARIA IA Service corriendo en puerto ${PORT}`);
   console.log(`Modelo: Google Gemini 2.5 Flash`);

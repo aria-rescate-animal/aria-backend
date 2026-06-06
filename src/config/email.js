@@ -122,4 +122,86 @@ const enviarOTPRecuperacion = async (email, nombre, codigo) => {
   console.log('OTP recuperacion enviado a:', email, '| ID:', data?.id);
 };
 
-module.exports = { enviarOTP, enviarMagicLink, enviarOTPRecuperacion };
+const enviarCorreoEntidadAprobada = async (email, nombreEntidad) => {
+  const nombre = nombreEntidad || 'tu entidad';
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: email,
+    subject: 'Tu entidad fue aprobada en ARIA',
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:2rem;background:#f8fafc;border-radius:16px;">
+        <div style="background:#0f172a;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
+          <h1 style="color:white;margin:0;font-size:1.5rem;font-weight:800;letter-spacing:2px;">ARIA</h1>
+          <p style="color:rgba(255,255,255,0.8);margin:0.25rem 0 0;font-size:0.875rem;">Plataforma de Rescate Animal</p>
+        </div>
+        <div style="background:white;border-radius:12px;padding:1.5rem;border:1px solid #e2e8f0;">
+          <h2 style="color:#0f172a;margin:0 0 0.75rem;font-size:1.15rem;">Entidad aprobada</h2>
+          <p style="color:#475569;margin:0 0 1rem;line-height:1.6;font-size:0.9rem;">
+            La solicitud de <strong>${nombre}</strong> fue revisada y aprobada por el equipo administrador.
+          </p>
+          <p style="color:#475569;margin:0;line-height:1.6;font-size:0.9rem;">
+            Ya puedes ingresar a ARIA para recibir reportes, gestionar casos y operar dentro de la plataforma.
+          </p>
+        </div>
+        <p style="color:#94a3b8;font-size:0.75rem;text-align:center;margin-top:1rem;">
+          Este mensaje fue generado automaticamente por ARIA.
+        </p>
+      </div>
+    `
+  });
+
+  if (error) {
+    console.error('Error Resend Entidad Aprobada:', JSON.stringify(error));
+    throw new Error(error.message || 'Error al enviar correo de entidad aprobada');
+  }
+
+  console.log('Correo entidad aprobada enviado a:', email, '| ID:', data?.id);
+};
+
+const enviarCorreoEntidadRechazada = async (email, nombreEntidad, motivo) => {
+  const nombre = nombreEntidad || 'tu entidad';
+  const motivoSeguro = motivo || 'La solicitud no cumple los requisitos de aprobacion.';
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: email,
+    subject: 'Resultado de revision de tu entidad en ARIA',
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:2rem;background:#f8fafc;border-radius:16px;">
+        <div style="background:#0f172a;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
+          <h1 style="color:white;margin:0;font-size:1.5rem;font-weight:800;letter-spacing:2px;">ARIA</h1>
+          <p style="color:rgba(255,255,255,0.8);margin:0.25rem 0 0;font-size:0.875rem;">Plataforma de Rescate Animal</p>
+        </div>
+        <div style="background:white;border-radius:12px;padding:1.5rem;border:1px solid #e2e8f0;">
+          <h2 style="color:#0f172a;margin:0 0 0.75rem;font-size:1.15rem;">Solicitud no aprobada</h2>
+          <p style="color:#475569;margin:0 0 1rem;line-height:1.6;font-size:0.9rem;">
+            La solicitud de <strong>${nombre}</strong> fue revisada y no fue aprobada por el momento.
+          </p>
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:1rem;color:#9a3412;font-size:0.875rem;line-height:1.5;">
+            <strong>Motivo:</strong> ${motivoSeguro}
+          </div>
+          <p style="color:#475569;margin:1rem 0 0;line-height:1.6;font-size:0.9rem;">
+            Puedes corregir la informacion y contactar al administrador para una nueva revision.
+          </p>
+        </div>
+        <p style="color:#94a3b8;font-size:0.75rem;text-align:center;margin-top:1rem;">
+          Este mensaje fue generado automaticamente por ARIA.
+        </p>
+      </div>
+    `
+  });
+
+  if (error) {
+    console.error('Error Resend Entidad Rechazada:', JSON.stringify(error));
+    throw new Error(error.message || 'Error al enviar correo de entidad rechazada');
+  }
+
+  console.log('Correo entidad rechazada enviado a:', email, '| ID:', data?.id);
+};
+
+module.exports = {
+  enviarOTP,
+  enviarMagicLink,
+  enviarOTPRecuperacion,
+  enviarCorreoEntidadAprobada,
+  enviarCorreoEntidadRechazada,
+};

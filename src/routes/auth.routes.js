@@ -104,6 +104,7 @@ router.post('/register', async (req, res) => {
 
     let nitNormalizado = null
     let serviciosLimpios = null
+    let telNormalizado = null
 
     if (rolFinal === 'entidad') {
       const nitValidacion = validarNIT(nit)
@@ -124,7 +125,7 @@ router.post('/register', async (req, res) => {
       }
 
       const nombreOrg = String(nombre_organizacion || '').trim()
-      const telNormalizado = normalizarTelefonoColombia(telefono_oficial)
+      telNormalizado = normalizarTelefonoColombia(telefono_oficial)
       const ciudadFinal = String(ciudad || '').trim()
       const representanteFinal = String(representante || '').trim()
       const descripcionFinal = String(descripcion_entidad || '').trim()
@@ -200,7 +201,7 @@ router.post('/register', async (req, res) => {
   }
 })
 
-router.post('/verificar-cuenta', async (req, res) => {
+const verificarCuenta = async (req, res) => {
   try {
     const { email, codigo } = req.body
     if (!email || !codigo) return res.status(400).json({ error: 'Email y código son requeridos' })
@@ -247,12 +248,10 @@ router.post('/verificar-cuenta', async (req, res) => {
     console.error('verificar-cuenta:', error)
     res.status(500).json({ error: 'Error al verificar código' })
   }
-})
+}
 
-router.post('/verificar-otp', async (req, res) => {
-  req.url = '/verificar-cuenta'
-  return router.handle(req, res)
-})
+router.post('/verificar-cuenta', verificarCuenta)
+router.post('/verificar-otp', verificarCuenta)
 
 router.post('/reenviar-otp', async (req, res) => {
   try {
@@ -335,10 +334,13 @@ router.get('/entidades-disponibles', verificarToken, async (req, res) => {
 
     const entidades = rows.map(e => {
       const servicios = serviciosToArray(e.servicios_ofrecidos)
+      const serviciosRelevantes = serviciosCompatibles.length > 0
+        ? servicios.filter(s => serviciosCompatibles.includes(s))
+        : servicios
       const compatible = req.query.categoria
-        ? (!categoriaRequiereRevision(categoria) && serviciosCompatibles.length > 0 && servicios.some(s => serviciosCompatibles.includes(s)))
+        ? (!categoriaRequiereRevision(categoria) && serviciosRelevantes.length > 0)
         : true
-      return { ...e, servicios, compatible }
+      return { ...e, servicios, servicios_relevantes: serviciosRelevantes, compatible }
     })
 
     res.json({

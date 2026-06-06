@@ -1,98 +1,192 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+﻿# ARIA Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend del proyecto ARIA, una plataforma para reportar animales en situacion de riesgo, gestionar casos por entidades y publicar mascotas perdidas.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Este repositorio contiene la API principal, la integracion con servicios externos y el microservicio de IA usado para validacion de imagenes.
 
-## Description
+## Tecnologias
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Node.js
+- Express.js
+- MySQL / MariaDB
+- mysql2
+- JWT
+- Passport.js
+- Google OAuth 2.0
+- bcryptjs
+- Multer
+- Cloudinary
+- Resend
+- Google Gemini
+- Docker Compose
 
-## Project setup
+## Estructura principal
 
-```bash
-$ npm install
+```txt
+index.js                  Punto de entrada de la API
+src/routes/               Rutas HTTP del backend
+src/controllers/          Logica de reportes, mascotas y notificaciones
+src/middlewares/          Autenticacion y permisos
+src/config/               Configuracion de servicios externos
+src/utils/                Constantes y utilidades compartidas
+ia-service/               Microservicio de validacion con Gemini
+database/aria_db.sql      Script SQL para inicializar la base de datos
+test/                     Pruebas automaticas basicas
 ```
 
-## Compile and run the project
+## Variables de entorno
 
-```bash
-# development
-$ npm run start
+El backend usa `.env` para ejecucion normal con Node.js.
 
-# watch mode
-$ npm run start:dev
+Variables principales:
 
-# production mode
-$ npm run start:prod
+```env
+PORT=3000
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=aria_db
+
+JWT_SECRET=
+SESSION_SECRET=
+
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
+RESEND_API_KEY=
+GEMINI_API_KEY=
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+IA_SERVICE_URL=http://localhost:4000
 ```
 
-## Run tests
+No subas `.env` al repositorio.
 
-```bash
-# unit tests
-$ npm run test
+## Ejecucion sin Docker
 
-# e2e tests
-$ npm run test:e2e
+Instalar dependencias:
 
-# test coverage
-$ npm run test:cov
+```powershell
+npm install
 ```
 
-## Deployment
+Ejecutar backend en modo desarrollo:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```powershell
+npm run dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Ejecutar en modo normal:
 
-## Resources
+```powershell
+npm start
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Ejecutar pruebas:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```powershell
+npm test
+```
 
-## Support
+## IA Service
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+El microservicio de IA vive en `ia-service/` y corre en el puerto `4000`.
 
-## Stay in touch
+```powershell
+cd ia-service
+npm install
+npm run dev
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Endpoint base:
 
-## License
+```txt
+GET http://localhost:4000
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Docker Compose
+
+El proyecto puede levantarse completo con Docker Compose:
+
+- MySQL
+- Backend
+- IA Service
+- Frontend
+
+La guia detallada esta en:
+
+```txt
+DOCKER.md
+```
+
+Comando principal usando `.env`:
+
+```powershell
+docker compose up -d --build
+```
+
+Comando alternativo usando `docker.env`:
+
+```powershell
+docker compose --env-file docker.env up -d --build
+```
+
+Verificar servicios:
+
+```powershell
+docker compose ps
+```
+
+## Endpoints principales
+
+```txt
+/api/auth
+/api/reportes
+/api/mascotas-perdidas
+/api/admin
+/api/notificaciones
+/api/validar-animal
+/api/health
+```
+
+Healthcheck:
+
+```txt
+GET http://localhost:3000/api/health
+```
+
+## Base de datos
+
+El esquema principal se encuentra en:
+
+```txt
+database/aria_db.sql
+```
+
+Tablas principales:
+
+- usuarios
+- reportes
+- mascotas_perdidas
+- notificaciones
+- verificaciones_otp
+- tokens_recuperacion
+
+## Roles del sistema
+
+- ciudadano
+- entidad
+- administrador
+
+## Seguridad
+
+- No subir `.env`.
+- No subir `docker.env`.
+- No subir `node_modules`.
+- No subir credenciales de Cloudinary, Resend, Gemini o Google OAuth.
+- Usar ramas y pull requests para integrar cambios.
